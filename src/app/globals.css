@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-canvas: #f6f6f4;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f0f0ee;
+  --text-primary: #141413;
+  --text-muted: #6e6e69;
+  --text-faint: #9c9c94;
+  --border-color: #e4e4df;
+  --border-faint: #ecece8;
+
+  /* Calm Accent (Dynamic from DB, default #2f8f4e) */
+  --accent-color: #2f8f4e;
+  --accent-hover: #26733e;
+  --accent-light: rgba(47, 143, 78, 0.08);
+  --accent-foreground: #ffffff;
+}
+
+.dark {
+  --bg-canvas: #0f1010;
+  --bg-surface: #181919;
+  --bg-subtle: #222424;
+  --text-primary: #f2f2ef;
+  --text-muted: #a0a09b;
+  --text-faint: #676762;
+  --border-color: #2c2e2e;
+  --border-faint: #202222;
+
+  --accent-color: #3bb363;
+  --accent-hover: #48c773;
+  --accent-light: rgba(59, 179, 99, 0.15);
+  --accent-foreground: #0f1010;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Editorial typography clamps */
+  .clamp-hero {
+    font-size: clamp(2.25rem, 5.5vw, 5.25rem);
+    line-height: 1.05;
+    letter-spacing: -0.035em;
+  }
+
+  .clamp-title {
+    font-size: clamp(1.75rem, 3.8vw, 3.25rem);
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+  }
+}
+
+/* Subtle dashed styling for editorial tables */
+.dashed-row {
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.dashed-box {
+  border: 1px dashed var(--border-color);
+}
+
+/* Outlined numerals for services and processes (as seen in Quenbylynn & Fendrel references) */
+.outlined-numeral {
+  font-family: inherit;
+  font-weight: 300;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--text-faint);
+  line-height: 1;
+}
+
+.dark .outlined-numeral {
+  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.25);
+}
+
+/* Horizontal scrollbar styling for mobile nav */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Page fade transition */
+@media (prefers-reduced-motion: no-preference) {
+  .page-fade {
+    animation: fadeIn 0.35s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "nav": {
+    "home": "Home",
+    "services": "Services",
+    "doctors": "Our Doctors",
+    "gallery": "Gallery",
+    "contact": "Contact",
+    "bookVisit": "Book a visit",
+    "callNow": "Call clinic"
+  },
+  "hero": {
+    "tag": "Modern & Compassionate Care",
+    "headlineLight": "Gentle dental care designed for",
+    "headlineBold": "lifelong smiles.",
+    "subheading": "Comprehensive family dentistry, pain-free root canals, and modern smile corrections in Rasipuram.",
+    "bookCta": "Book a consultation",
+    "callCta": "Call +91 94432 78120",
+    "openToday": "Open today",
+    "closedToday": "Closed today",
+    "openHours": "9:30 AM – 8:30 PM",
+    "statusOpen": "Accepting patients now",
+    "statusBreak": "Afternoon break: 1:30 PM - 4:30 PM"
+  },
+  "trust": {
+    "point1Title": "Walk-ins Welcome",
+    "point1Desc": "Emergency tooth pain or urgent consultations accommodated promptly.",
+    "point2Title": "Clear, Honest Pricing",
+    "point2Desc": "Consultation fees and procedure estimates shared clearly upfront. No hidden charges.",
+    "point3Title": "Hospital-Grade Hygiene",
+    "point3Desc": "Class-B autoclave sterilization and single-use disposable kits for each patient."
+  },
+  "services": {
+    "title": "Clinical Treatments",
+    "subtitle": "Select a procedure to explore details, duration, and starting fee.",
+    "startingFrom": "Starting from",
+    "approxDuration": "Approx.",
+    "minutes": "mins",
+    "bookThis": "Book this treatment",
+    "viewAll": "View all services"
+  },
+  "doctors": {
+    "title": "Meet Your Doctors",
+    "subtitle": "Experienced clinicians registered with the Tamil Nadu Dental Council.",
+    "regNo": "Reg. No",
+    "experience": "Experience",
+    "years": "years",
+    "languages": "Languages",
+    "consultationFee": "Consultation fee"
+  },
+  "booking": {
+    "title": "Schedule a Visit",
+    "subtitle": "Fill in your details below. We will confirm your slot and open a WhatsApp chat with our clinic reception.",
+    "nameLabel": "Patient Full Name",
+    "namePlaceholder": "e.g. S. Murugan",
+    "phoneLabel": "Mobile Number",
+    "phonePlaceholder": "e.g. 98765 43210",
+    "treatmentLabel": "Treatment / Reason for visit",
+    "selectTreatment": "Select a treatment or consultation",
+    "dateLabel": "Preferred Date",
+    "timeLabel": "Preferred Time of Day",
+    "timeMorning": "Morning (09:30 AM – 01:00 PM)",
+    "timeEvening": "Evening (04:30 PM – 08:00 PM)",
+    "notesLabel": "Any specific tooth pain or request? (Optional)",
+    "notesPlaceholder": "e.g. Pain in lower left molar, prefer evening appointment",
+    "consentText": "I agree to be contacted via WhatsApp/phone regarding my appointment.",
+    "submitButton": "Confirm & Send via WhatsApp",
+    "submitting": "Submitting booking...",
+    "directCall": "Or speak directly with reception:",
+    "privacyNotice": "Your details are confidential and used exclusively for your appointment."
+  },
+  "footer": {
+    "addressTitle": "Clinic Location",
+    "hoursTitle": "Clinic Timings",
+    "contactTitle": "Direct Contact",
+    "emergencyTitle": "Emergency Support",
+    "disclaimer": "Medical Disclaimer: Information on this site is general health education and does not replace in-person clinical diagnosis.",
+    "allRightsReserved": "All rights reserved.",
+    "privacy": "Privacy Policy",
+    "disclaimerLink": "Medical Disclaimer"
+  }
+}
