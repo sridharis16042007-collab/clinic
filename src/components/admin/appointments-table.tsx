@@ -12,6 +12,7 @@ import {
   Search,
   Phone,
   MessageCircle,
+  Mail,
   Download,
   Calendar,
   Clock,
@@ -50,25 +51,31 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
   });
 
   // Handle status update
-  const handleStatusChange = async (id: string, newStatus: AppointmentStatus) => {
+  const handleStatusChange = async (appRecord: Appointment, newStatus: AppointmentStatus) => {
     setIsUpdating(true);
     setAppointments((prev) =>
-      prev.map((app) => (app.id === id ? { ...app, status: newStatus } : app))
+      prev.map((app) => (app.id === appRecord.id ? { ...app, status: newStatus } : app))
     );
 
-    await updateAppointmentStatus(id, newStatus);
+    await updateAppointmentStatus(appRecord.id, newStatus, {
+      ...appRecord,
+      status: newStatus,
+    });
     setIsUpdating(false);
   };
 
   // Handle saving internal notes
-  const saveNotes = async (id: string) => {
+  const saveNotes = async (appRecord: Appointment) => {
     setAppointments((prev) =>
       prev.map((app) =>
-        app.id === id ? { ...app, internal_notes: tempNotes } : app
+        app.id === appRecord.id ? { ...app, internal_notes: tempNotes } : app
       )
     );
     setEditingNotesId(null);
-    await updateAppointmentNotes(id, tempNotes);
+    await updateAppointmentNotes(appRecord.id, tempNotes, {
+      ...appRecord,
+      internal_notes: tempNotes,
+    });
   };
 
   // Handle delete
@@ -83,6 +90,7 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
   const exportToCSV = () => {
     const headers = [
       'Patient Name',
+      'Email',
       'Phone',
       'Treatment',
       'Preferred Date',
@@ -95,6 +103,7 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
 
     const rows = filteredAppointments.map((app) => [
       `"${app.patient_name}"`,
+      `"${app.email || ''}"`,
       `"${app.phone}"`,
       `"${app.treatment_name || 'General Consultation'}"`,
       `"${app.preferred_date}"`,
@@ -223,7 +232,7 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
                     value={app.status}
                     onChange={(e) =>
                       handleStatusChange(
-                        app.id,
+                        app,
                         e.target.value as AppointmentStatus
                       )
                     }
@@ -295,7 +304,7 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
                       className="flex-1 px-3 py-1.5 bg-canvas border border-border rounded-lg text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
                     />
                     <button
-                      onClick={() => saveNotes(app.id)}
+                      onClick={() => saveNotes(app)}
                       className="p-1.5 rounded-lg bg-accent text-white"
                       title="Save note"
                     >
@@ -328,6 +337,16 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
                     <Phone className="w-3.5 h-3.5 text-accent" />
                     <span>Call ({app.phone})</span>
                   </a>
+
+                  {app.email && (
+                    <a
+                      href={`mailto:${app.email}`}
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-canvas hover:bg-surface border border-border text-xs font-semibold text-ink transition-colors"
+                    >
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Email ({app.email})</span>
+                    </a>
+                  )}
 
                   <a
                     href={`https://wa.me/${cleanPhoneForTel(

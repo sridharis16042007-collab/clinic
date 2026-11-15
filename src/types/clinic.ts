@@ -1,18 +1,23 @@
 import { Database } from './database';
 
-export type SiteSettings = Database['public']['Tables']['site_settings']['Row'];
+export type SiteSettings = Database['public']['Tables']['site_settings']['Row'] & {
+  google_sheets_script_url?: string | null;
+};
 export type OpeningHours = Database['public']['Tables']['opening_hours']['Row'];
 export type Service = Database['public']['Tables']['services']['Row'];
 export type Doctor = Database['public']['Tables']['doctors']['Row'];
 export type GalleryImage = Database['public']['Tables']['gallery_images']['Row'];
 export type Testimonial = Database['public']['Tables']['testimonials']['Row'];
-export type Appointment = Database['public']['Tables']['appointments']['Row'];
+export type Appointment = Database['public']['Tables']['appointments']['Row'] & {
+  email?: string;
+};
 export type SeoPage = Database['public']['Tables']['seo_pages']['Row'];
 
 export type AppointmentStatus = 'new' | 'confirmed' | 'completed' | 'cancelled';
 
 export interface BookingFormData {
   patient_name: string;
+  email: string;
   phone: string;
   treatment_id?: string;
   treatment_name?: string;

@@ -12,6 +12,7 @@ import {
   Clock,
   User,
   Phone,
+  Mail,
   MessageSquare,
   ShieldCheck,
   CheckCircle,
@@ -49,6 +50,7 @@ export function BookingForm({ services, settings }: BookingFormProps) {
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
       patient_name: '',
+      email: '',
       phone: '',
       treatment_id: preselectedTreatmentId || null,
       treatment_name: preselectedTreatmentName || '',
@@ -202,6 +204,33 @@ export function BookingForm({ services, settings }: BookingFormProps) {
         </div>
         {errors.patient_name && (
           <p className="text-xs text-red-600">{errors.patient_name.message}</p>
+        )}
+      </div>
+
+      {/* Patient Email (for Google Sheets sync & automated confirmation emails) */}
+      <div className="space-y-2">
+        <label
+          htmlFor="email"
+          className="block text-xs uppercase tracking-wider font-semibold text-ink"
+        >
+          Email Address (For booking confirmation &amp; status updates) <span className="text-accent">*</span>
+        </label>
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-muted">
+            <Mail className="w-4 h-4" />
+          </div>
+          <input
+            id="email"
+            type="email"
+            placeholder="e.g. patient@example.com"
+            {...register('email')}
+            className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${
+              errors.email ? 'border-red-500' : 'border-border'
+            }`}
+          />
+        </div>
+        {errors.email && (
+          <p className="text-xs text-red-600">{errors.email.message}</p>
         )}
       </div>
 

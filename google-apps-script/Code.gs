@@ -1,0 +1,344 @@
+/**
+ * ==============================================================================
+ * GOOGLE APPS SCRIPT: CLINIC DATABASE & EMAIL AUTOMATION SYSTEM
+ * Clinic: Vriksham Dental Care (Rasipuram, Namakkal, Tamil Nadu)
+ * 
+ * INSTRUCTIONS TO DEPLOY:
+ * 1. Open Google Sheets -> Extensions -> Apps Script
+ * 2. Delete any existing code in Code.gs and paste this entire code.
+ * 3. Click "Deploy" -> "New deployment"
+ * 4. Select type: "Web app"
+ * 5. Configuration:
+ *    - Description: "Clinic Booking & Status Webhook"
+ *    - Execute as: "Me" (your Google account)
+ *    - Who has access: "Anyone" (CRITICAL: Must be "Anyone" so the website can submit)
+ * 6. Click "Deploy" and authorize access when prompted.
+ * 7. Copy the Web app URL ending in "/exec" and paste it in .env.local or Admin Settings.
+ * ==============================================================================
+ */
+
+var SHEET_NAME = "Appointments";
+
+/**
+ * Handle incoming POST requests from the website booking form and admin console
+ */
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  // Wait up to 30 seconds for concurrent requests
+  lock.tryLock(30000);
+
+  try {
+    var rawData = e.postData ? e.postData.contents : "";
+    var data = {};
+
+    try {
+      data = JSON.parse(rawData);
+    } catch (parseErr) {
+      data = e.parameter || {};
+    }
+
+    var action = data.action || "create_appointment";
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = getOrCreateSheet(ss, SHEET_NAME);
+
+    if (action === "create_appointment") {
+      return handleCreateAppointment(sheet, data);
+    } else if (action === "update_status") {
+      return handleUpdateStatus(sheet, data);
+    } else {
+      return createJsonResponse({
+        status: "error",
+        message: "Unknown action: " + action
+      });
+    }
+  } catch (error) {
+    return createJsonResponse({
+      status: "error",
+      message: error.toString()
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Handle incoming GET requests (health check)
+ */
+function doGet(e) {
+  return createJsonResponse({
+    status: "ok",
+    clinic: "Vriksham Dental Care",
+    message: "Google Sheets Webhook API is active and ready to receive bookings.",
+    timestamp: new Date().toISOString()
+  });
+}
+
+/**
+ * 1. CREATE APPOINTMENT:
+ * Appends row to sheet, sends customer success email, and notifies clinic
+ */
+function handleCreateAppointment(sheet, data) {
+  var timestamp = new Date();
+  var appointmentId = data.appointment_id || "APP-" + timestamp.getTime();
+  var patientName = data.patient_name || "";
+  var email = data.email || "";
+  var phone = data.phone || "";
+  var treatment = data.treatment_name || "General Dental Consultation";
+  var preferredDate = data.preferred_date || "";
+  var preferredTime = data.preferred_time || "";
+  var status = data.status || "new";
+  var patientNotes = data.patient_notes || "";
+  var internalNotes = data.internal_notes || "";
+  var clinicName = data.clinic_name || "Vriksham Dental Care";
+  var clinicPhone = data.clinic_phone || "+91 94432 78120";
+
+  // Append new row to Google Sheet
+  sheet.appendRow([
+    timestamp,
+    appointmentId,
+    patientName,
+    email,
+    phone,
+    treatment,
+    preferredDate,
+    preferredTime,
+    status,
+    patientNotes,
+    internalNotes
+  ]);
+
+  // 1. Send Customer Success Confirmation Email
+  if (email && email.indexOf("@") !== -1) {
+    sendCustomerSuccessEmail({
+      toEmail: email,
+      patientName: patientName,
+      treatment: treatment,
+      preferredDate: preferredDate,
+      preferredTime: preferredTime,
+      appointmentId: appointmentId,
+      clinicName: clinicName,
+      clinicPhone: clinicPhone
+    });
+  }
+
+  return createJsonResponse({
+    status: "success",
+    message: "Appointment saved to Google Sheet & confirmation email sent to patient.",
+    appointment_id: appointmentId
+  });
+}
+
+/**
+ * 2. UPDATE STATUS:
+ * Updates the appointment status in the sheet and emails the customer their updated status
+ */
+function handleUpdateStatus(sheet, data) {
+  var appointmentId = data.appointment_id || "";
+  var email = data.email || "";
+  var phone = data.phone || "";
+  var newStatus = data.status || "confirmed";
+  var internalNotes = data.internal_notes || "";
+  var patientName = data.patient_name || "Patient";
+  var treatment = data.treatment_name || "Dental Treatment";
+  var preferredDate = data.preferred_date || "";
+  var preferredTime = data.preferred_time || "";
+  var clinicName = data.clinic_name || "Vriksham Dental Care";
+  var clinicPhone = data.clinic_phone || "+91 94432 78120";
+
+  var dataRange = sheet.getDataRange();
+  var values = dataRange.getValues();
+  var rowIndex = -1;
+
+  // Search for the matching row by appointmentId or Email/Phone
+  for (var i = 1; i < values.length; i++) {
+    var rowId = String(values[i][1]);
+    var rowEmail = String(values[i][3]);
+    var rowPhone = String(values[i][4]);
+
+    if (appointmentId && rowId === String(appointmentId)) {
+      rowIndex = i + 1;
+      if (!email && rowEmail) email = rowEmail;
+      if (!patientName && values[i][2]) patientName = values[i][2];
+      break;
+    } else if (email && rowEmail.toLowerCase() === email.toLowerCase()) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+
+  // Update sheet if row found
+  if (rowIndex !== -1) {
+    // Column 9: Status
+    sheet.getRange(rowIndex, 9).setValue(newStatus);
+    // Column 11: Internal Notes (if provided)
+    if (internalNotes) {
+      sheet.getRange(rowIndex, 11).setValue(internalNotes);
+    }
+  }
+
+  // Send status update notification email to the patient
+  if (email && email.indexOf("@") !== -1) {
+    sendStatusUpdateEmail({
+      toEmail: email,
+      patientName: patientName,
+      status: newStatus,
+      treatment: treatment,
+      preferredDate: preferredDate,
+      preferredTime: preferredTime,
+      appointmentId: appointmentId,
+      internalNotes: internalNotes,
+      clinicName: clinicName,
+      clinicPhone: clinicPhone
+    });
+  }
+
+  return createJsonResponse({
+    status: "success",
+    message: "Status updated to " + newStatus + " and customer notified via email.",
+    row_updated: rowIndex !== -1
+  });
+}
+
+/**
+ * Helper to ensure Appointments sheet exists with styled headers
+ */
+function getOrCreateSheet(ss, sheetName) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    var headers = [
+      "Timestamp",
+      "Appointment ID",
+      "Patient Name",
+      "Email Address",
+      "Mobile Phone",
+      "Treatment / Service",
+      "Preferred Date",
+      "Preferred Time",
+      "Status",
+      "Patient Notes",
+      "Clinic Internal Notes"
+    ];
+    sheet.appendRow(headers);
+    var headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setFontWeight("bold");
+    headerRange.setBackground("#2f8f4e");
+    headerRange.setFontColor("#ffffff");
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/**
+ * Sends a patient confirmation email (Customer Success)
+ */
+function sendCustomerSuccessEmail(params) {
+  var subject = "Appointment Request Received - " + params.clinicName;
+
+  var htmlBody = ""
+    + "<div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e5e0; border-radius: 16px; overflow: hidden;'>"
+    + "  <div style='background-color: #2f8f4e; padding: 28px; text-align: center; color: #ffffff;'>"
+    + "    <h1 style='margin: 0; font-size: 24px; font-weight: 700;'>" + params.clinicName + "</h1>"
+    + "    <p style='margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;'>Salem Main Road, Rasipuram, Namakkal District</p>"
+    + "  </div>"
+    + "  <div style='padding: 32px 28px; color: #141413;'>"
+    + "    <h2 style='font-size: 20px; font-weight: 600; margin-top: 0; color: #141413;'>Appointment Request Received</h2>"
+    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Dear <strong>" + params.patientName + "</strong>,</p>"
+    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Thank you for scheduling your consultation with us. We have received your booking details and saved them in our clinic scheduling calendar.</p>"
+    + "    <div style='background-color: #f6f6f4; border: 1px solid #e4e4df; border-radius: 12px; padding: 20px; margin: 24px 0;'>"
+    + "      <table style='width: 100%; font-size: 13px; line-height: 1.8;'>"
+    + "        <tr><td style='color: #777770; width: 40%;'>Appointment ID:</td><td style='font-weight: 600; font-family: monospace;'>" + params.appointmentId + "</td></tr>"
+    + "        <tr><td style='color: #777770;'>Treatment / Reason:</td><td style='font-weight: 600; color: #2f8f4e;'>" + params.treatment + "</td></tr>"
+    + "        <tr><td style='color: #777770;'>Preferred Date:</td><td style='font-weight: 600;'>" + params.preferredDate + "</td></tr>"
+    + "        <tr><td style='color: #777770;'>Preferred Time:</td><td style='font-weight: 600;'>" + params.preferredTime + "</td></tr>"
+    + "        <tr><td style='color: #777770;'>Current Status:</td><td style='font-weight: 600;'><span style='background: #e6f4ea; color: #137333; padding: 2px 8px; border-radius: 99px; font-size: 11px;'>Received / Pending Confirmation</span></td></tr>"
+    + "      </table>"
+    + "    </div>"
+    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Our reception desk will contact you via WhatsApp or phone call to confirm your final slot with our doctor.</p>"
+    + "    <div style='margin-top: 30px; padding-top: 20px; border-top: 1px dashed #e2e2dd;'>"
+    + "      <p style='margin: 0; font-size: 13px; color: #777770;'>Need urgent assistance or have acute pain?</p>"
+    + "      <p style='margin: 4px 0 0 0; font-size: 14px; font-weight: 600; color: #2f8f4e;'>Direct Reception Hotline: " + params.clinicPhone + "</p>"
+    + "    </div>"
+    + "  </div>"
+    + "  <div style='background-color: #f6f6f4; padding: 18px 28px; text-align: center; font-size: 11px; color: #888880; border-top: 1px solid #e5e5e0;'>"
+    + "    <p style='margin: 0;'>© " + new Date().getFullYear() + " " + params.clinicName + ", Rasipuram, Tamil Nadu.</p>"
+    + "    <p style='margin: 4px 0 0 0;'>This is an automated confirmation email for your appointment request.</p>"
+    + "  </div>"
+    + "</div>";
+
+  try {
+    MailApp.sendEmail({
+      to: params.toEmail,
+      subject: subject,
+      htmlBody: htmlBody
+    });
+  } catch (err) {
+    Logger.log("Failed to send customer success email: " + err);
+  }
+}
+
+/**
+ * Sends a status update email to the patient when admin changes status
+ */
+function sendStatusUpdateEmail(params) {
+  var statusTitles = {
+    confirmed: "Confirmed",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    new: "Under Review"
+  };
+
+  var niceStatus = statusTitles[params.status] || params.status;
+  var subject = "Appointment " + niceStatus + " - " + params.clinicName;
+
+  var statusColor = "#2f8f4e";
+  var statusMessage = "Your appointment has been confirmed by our clinical desk. Please arrive 10 minutes prior to your slot.";
+
+  if (params.status === "completed") {
+    statusColor = "#1a73e8";
+    statusMessage = "Thank you for visiting " + params.clinicName + ". We hope your visit was gentle and comfortable. Please follow any post-treatment care instructions given by the doctor.";
+  } else if (params.status === "cancelled") {
+    statusColor = "#d93025";
+    statusMessage = "Your appointment has been cancelled. If you would like to reschedule for another day or have questions, please call our clinic desk.";
+  }
+
+  var htmlBody = ""
+    + "<div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e5e0; border-radius: 16px; overflow: hidden;'>"
+    + "  <div style='background-color: " + statusColor + "; padding: 24px; text-align: center; color: #ffffff;'>"
+    + "    <h1 style='margin: 0; font-size: 22px; font-weight: 700;'>" + params.clinicName + "</h1>"
+    + "    <p style='margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;'>Status Update Notification</p>"
+    + "  </div>"
+    + "  <div style='padding: 32px 28px; color: #141413;'>"
+    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Dear <strong>" + params.patientName + "</strong>,</p>"
+    + "    <div style='margin: 20px 0; padding: 16px 20px; border-radius: 12px; background-color: #fbfbfa; border-left: 4px solid " + statusColor + ";'>"
+    + "      <div style='font-size: 12px; text-transform: uppercase; font-weight: 700; color: " + statusColor + ";'>Appointment Status: " + niceStatus.toUpperCase() + "</div>"
+    + "      <p style='font-size: 14px; color: #333330; margin: 8px 0 0 0; line-height: 1.5;'>" + statusMessage + "</p>"
+    + "    </div>"
+    + "    <div style='background-color: #f6f6f4; border: 1px solid #e4e4df; border-radius: 12px; padding: 18px; margin: 24px 0; font-size: 13px; line-height: 1.8;'>"
+    + "      <div><strong>Treatment:</strong> " + params.treatment + "</div>"
+    + (params.preferredDate ? "<div><strong>Date:</strong> " + params.preferredDate + "</div>" : "")
+    + (params.preferredTime ? "<div><strong>Time Slot:</strong> " + params.preferredTime + "</div>" : "")
+    + (params.internalNotes ? "<div style='margin-top: 8px; color: #444440; font-style: italic;'><strong>Note from Doctor:</strong> " + params.internalNotes + "</div>" : "")
+    + "    </div>"
+    + "    <p style='font-size: 13px; line-height: 1.6; color: #666660;'>Location: No. 42/B, Salem Main Road, Near Old Bus Stand, Rasipuram, Namakkal.<br>Direct Phone: <strong>" + params.clinicPhone + "</strong></p>"
+    + "  </div>"
+    + "  <div style='background-color: #f6f6f4; padding: 16px; text-align: center; font-size: 11px; color: #888880; border-top: 1px solid #e5e5e0;'>"
+    + "    © " + new Date().getFullYear() + " " + params.clinicName + ". All rights reserved."
+    + "  </div>"
+    + "</div>";
+
+  try {
+    MailApp.sendEmail({
+      to: params.toEmail,
+      subject: subject,
+      htmlBody: htmlBody
+    });
+  } catch (err) {
+    Logger.log("Failed to send status update email: " + err);
+  }
+}
+
+function createJsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}

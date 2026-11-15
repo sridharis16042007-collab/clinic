@@ -9,6 +9,11 @@ export const appointmentSchema = z.object({
     .min(2, { message: 'Please enter patient name (minimum 2 characters)' })
     .max(80, { message: 'Name cannot exceed 80 characters' })
     .trim(),
+  email: z
+    .string()
+    .email({ message: 'Please enter a valid email address for confirmation & updates' })
+    .trim()
+    .toLowerCase(),
   phone: z
     .string()
     .trim()

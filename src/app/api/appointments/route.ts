@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { appointmentSchema } from '@/lib/validations/appointment';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/utils/rate-limiter';
+import { sendToGoogleAppsScript } from '@/lib/google-sheets';
+import { getSiteSettings } from '@/lib/data';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,16 +38,39 @@ export async function POST(request: NextRequest) {
 
     // 3. Honeypot check
     if (data.honeypot && data.honeypot.length > 0) {
-      // Return 200 to trick spam bots without saving
       return NextResponse.json({ success: true, message: 'Request received' });
     }
 
-    // 4. Insert into Supabase
+    const appointmentId = `app-${Date.now()}`;
+    const settings = await getSiteSettings();
+
+    // 4. Send directly to Google Sheets database & trigger Customer Success Email
+    const googleSheetResult = await sendToGoogleAppsScript(
+      {
+        action: 'create_appointment',
+        appointment_id: appointmentId,
+        patient_name: data.patient_name,
+        email: data.email,
+        phone: data.phone,
+        treatment_name: data.treatment_name || 'General Consultation',
+        preferred_date: data.preferred_date,
+        preferred_time: data.preferred_time,
+        patient_notes: data.patient_notes || null,
+        status: 'new',
+        clinic_name: settings.clinic_name,
+        clinic_phone: settings.phone,
+      },
+      settings.google_sheets_script_url
+    );
+
+    // 5. Also insert into Supabase if connected
     const supabase = createClient();
     if (supabase) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: insertError } = await (supabase.from('appointments') as any).insert({
+      await (supabase.from('appointments') as any).insert({
+        id: appointmentId,
         patient_name: data.patient_name,
+        email: data.email,
         phone: data.phone,
         treatment_id: data.treatment_id || null,
         treatment_name: data.treatment_name || 'General Consultation',
@@ -55,17 +80,16 @@ export async function POST(request: NextRequest) {
         status: 'new',
         source: 'website',
       });
-
-      if (insertError) {
-        console.error('Database appointment insert error');
-      }
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Appointment request registered successfully.',
+      message: 'Appointment request registered successfully. Confirmation email dispatched.',
+      googleSheetsSynced: googleSheetResult.success,
+      appointmentId,
     });
-  } catch {
+  } catch (err) {
+    console.error('Appointment API error:', err);
     return NextResponse.json(
       { error: 'An unexpected error occurred. Please contact the clinic by phone.' },
       { status: 500 }

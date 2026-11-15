@@ -356,6 +356,33 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
         </div>
       </div>
 
+      {/* 5. Google Sheets Database & Webhook Integration */}
+      <div className="bg-surface rounded-3xl p-6 sm:p-8 border border-border shadow-soft space-y-5">
+        <h2 className="text-sm uppercase tracking-wider font-bold text-ink">
+          Google Sheets Database &amp; Email Webhook
+        </h2>
+        <p className="text-xs text-ink-muted">
+          Your Google Apps Script Web App URL stores all patient bookings directly into your Google Sheet and sends automated confirmation &amp; status emails to patients.
+        </p>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-ink">
+            Google Apps Script Web App URL (/exec)
+          </label>
+          <input
+            type="url"
+            name="google_sheets_script_url"
+            value={formData.google_sheets_script_url || ''}
+            onChange={handleChange}
+            placeholder="https://script.google.com/macros/s/.../exec"
+            className="w-full px-3.5 py-2.5 bg-canvas border border-border rounded-xl text-sm text-ink focus:outline-none font-mono text-xs"
+          />
+          <span className="block text-[11px] text-ink-muted mt-1">
+            Ensure this Web App is deployed with: <strong>Execute as: Me</strong> and <strong>Who has access: Anyone</strong>.
+          </span>
+        </div>
+      </div>
+
       <div className="sticky bottom-4 z-20 flex justify-end">
         <button
           type="submit"

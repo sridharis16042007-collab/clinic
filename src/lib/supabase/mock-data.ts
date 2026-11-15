@@ -30,6 +30,8 @@ export const fallbackSettings: SiteSettings = {
   google_maps_directions_url:
     'https://maps.google.com/?q=Rasipuram,+Tamil+Nadu+637408',
   google_review_url: 'https://g.page/r/vriksham-dental-rasipuram/review',
+  google_sheets_script_url:
+    'https://script.google.com/macros/s/AKfycbwkueZoSnwV1VQUJ5tUzfk_3rV_URDmbdfJKBTu6U8W6gsdwsxupEQNqa3MNs2lBSjO6Q/exec',
   accent_color: '#2f8f4e',
   logo_url: null,
   is_emergency_open: false,
@@ -427,6 +429,7 @@ export const fallbackAppointments: Appointment[] = [
   {
     id: 'a1',
     patient_name: 'P. Arumugam',
+    email: 'arumugam.patient@example.com',
     phone: '+91 98421 54321',
     treatment_id: 's1',
     treatment_name: 'Single-Sitting Root Canal',
@@ -442,6 +445,7 @@ export const fallbackAppointments: Appointment[] = [
   {
     id: 'a2',
     patient_name: 'K. Kowsalya',
+    email: 'kowsalya.patient@example.com',
     phone: '+91 97892 11223',
     treatment_id: 's3',
     treatment_name: 'Clear Aligners & Braces',
