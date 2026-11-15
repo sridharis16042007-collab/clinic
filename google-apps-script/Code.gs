@@ -10,9 +10,13 @@ var SPREADSHEET_ID = "13hZQKf5iGbFuJ1a-U334cYLL9CP3s4quC342-9n66kQ";
 
 function getSpreadsheet() {
   try {
-    return SpreadsheetApp.openById(SPREADSHEET_ID);
+    return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
   } catch (e) {
-    return SpreadsheetApp.getActiveSpreadsheet();
+    try {
+      return SpreadsheetApp.getActiveSpreadsheet();
+    } catch (err) {
+      throw new Error("Unable to open Spreadsheet with ID " + SPREADSHEET_ID + ": " + e.toString());
+    }
   }
 }
 
@@ -34,8 +38,8 @@ function doPost(e) {
     }
 
     var ss = getSpreadsheet();
-    // Use first sheet (Sheet1) or 'Appointments'
-    var sheet = ss.getSheetByName("Appointments") || ss.getSheetByName("Sheet1") || ss.getSheets()[0];
+    // Always write to the primary active tab (Sheet1 / first sheet)
+    var sheet = ss.getSheetByName("Sheet1") || ss.getSheets()[0];
 
     // Ensure headers exist
     ensureHeaders(sheet);
@@ -43,9 +47,13 @@ function doPost(e) {
     var action = data.action || "create_appointment";
 
     if (action === "create_appointment") {
-      return handleCreateAppointment(sheet, data);
+      var result = handleCreateAppointment(sheet, data, ss);
+      SpreadsheetApp.flush();
+      return result;
     } else if (action === "update_status") {
-      return handleUpdateStatus(sheet, data);
+      var updateResult = handleUpdateStatus(sheet, data, ss);
+      SpreadsheetApp.flush();
+      return updateResult;
     } else {
       return createJsonResponse({
         status: "error",
@@ -63,15 +71,27 @@ function doPost(e) {
 }
 
 /**
- * Handle incoming GET requests (health check)
+ * Handle incoming GET requests (health check & debug info)
  */
 function doGet(e) {
-  return createJsonResponse({
-    status: "ok",
-    clinic: "Vriksham Dental Care",
-    message: "Google Sheets Webhook API is active and ready to receive bookings.",
-    timestamp: new Date().toISOString()
-  });
+  try {
+    var ss = getSpreadsheet();
+    var sheet = ss ? (ss.getSheetByName("Sheet1") || ss.getSheets()[0]) : null;
+    return createJsonResponse({
+      status: "ok",
+      clinic: "Vriksham Dental Care",
+      spreadsheet_name: ss ? ss.getName() : "None",
+      spreadsheet_url: ss ? ss.getUrl() : "None",
+      sheet_name: sheet ? sheet.getName() : "None",
+      total_rows: sheet ? sheet.getLastRow() : 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    return createJsonResponse({
+      status: "error",
+      message: err.toString()
+    });
+  }
 }
 
 /**
@@ -105,7 +125,7 @@ function ensureHeaders(sheet) {
  * 1. CREATE APPOINTMENT:
  * Appends row to sheet, sends customer success email, and notifies clinic
  */
-function handleCreateAppointment(sheet, data) {
+function handleCreateAppointment(sheet, data, ss) {
   var timestamp = new Date();
   var appointmentId = data.appointment_id || "APP-" + timestamp.getTime();
   var patientName = data.patient_name || "";
@@ -152,7 +172,11 @@ function handleCreateAppointment(sheet, data) {
   return createJsonResponse({
     status: "success",
     message: "Appointment saved to Google Sheet & confirmation email sent to patient.",
-    appointment_id: appointmentId
+    appointment_id: appointmentId,
+    spreadsheet_name: ss ? ss.getName() : "Unknown",
+    spreadsheet_url: ss ? ss.getUrl() : "Unknown",
+    sheet_name: sheet.getName(),
+    row_number: sheet.getLastRow()
   });
 }
 
