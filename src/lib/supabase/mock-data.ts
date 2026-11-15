@@ -31,7 +31,7 @@ export const fallbackSettings: SiteSettings = {
     'https://maps.google.com/?q=Rasipuram,+Tamil+Nadu+637408',
   google_review_url: 'https://g.page/r/vriksham-dental-rasipuram/review',
   google_sheets_script_url:
-    'https://script.google.com/macros/s/AKfycbwkueZoSnwV1VQUJ5tUzfk_3rV_URDmbdfJKBTu6U8W6gsdwsxupEQNqa3MNs2lBSjO6Q/exec',
+    'https://script.google.com/macros/s/AKfycbxeyk1TkwwQc4nfCJCZ84Gr3ldpN5w8YISrioBtaf2s6JKbCZ8pkxwbjEGZKCThrYbVpA/exec',
   accent_color: '#2f8f4e',
   logo_url: null,
   is_emergency_open: false,

@@ -1,7 +1,7 @@
 import React from 'react';
 import { AppointmentsTable } from '@/components/admin/appointments-table';
 import { createClient } from '@/lib/supabase/server';
-import { fallbackAppointments } from '@/lib/supabase/mock-data';
+import { getLocalAppointments } from '@/lib/appointments-store';
 import { Appointment } from '@/types/clinic';
 import { Inbox } from 'lucide-react';
 
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminAppointmentsPage() {
   const supabase = createClient();
-  let appointments: Appointment[] = fallbackAppointments;
+  let appointments: Appointment[] = getLocalAppointments();
 
   if (supabase) {
     const { data, error } = await supabase

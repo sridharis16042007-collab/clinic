@@ -1,30 +1,26 @@
 /**
  * ==============================================================================
  * GOOGLE APPS SCRIPT: CLINIC DATABASE & EMAIL AUTOMATION SYSTEM
- * Clinic: Vriksham Dental Care (Rasipuram, Namakkal, Tamil Nadu)
- * 
- * INSTRUCTIONS TO DEPLOY:
- * 1. Open Google Sheets -> Extensions -> Apps Script
- * 2. Delete any existing code in Code.gs and paste this entire code.
- * 3. Click "Deploy" -> "New deployment"
- * 4. Select type: "Web app"
- * 5. Configuration:
- *    - Description: "Clinic Booking & Status Webhook"
- *    - Execute as: "Me" (your Google account)
- *    - Who has access: "Anyone" (CRITICAL: Must be "Anyone" so the website can submit)
- * 6. Click "Deploy" and authorize access when prompted.
- * 7. Copy the Web app URL ending in "/exec" and paste it in .env.local or Admin Settings.
+ * Spreadsheet: versionclinic (ID: 13hZQKf5iGbFuJ1a-U334cYLL9CP3s4quC342-9n66kQ)
  * ==============================================================================
  */
 
-var SHEET_NAME = "Appointments";
+// Your exact Spreadsheet ID from the URL:
+var SPREADSHEET_ID = "13hZQKf5iGbFuJ1a-U334cYLL9CP3s4quC342-9n66kQ";
+
+function getSpreadsheet() {
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (e) {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  }
+}
 
 /**
- * Handle incoming POST requests from the website booking form and admin console
+ * Handle incoming POST requests from the clinic website
  */
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  // Wait up to 30 seconds for concurrent requests
   lock.tryLock(30000);
 
   try {
@@ -37,9 +33,14 @@ function doPost(e) {
       data = e.parameter || {};
     }
 
+    var ss = getSpreadsheet();
+    // Use first sheet (Sheet1) or 'Appointments'
+    var sheet = ss.getSheetByName("Appointments") || ss.getSheetByName("Sheet1") || ss.getSheets()[0];
+
+    // Ensure headers exist
+    ensureHeaders(sheet);
+
     var action = data.action || "create_appointment";
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = getOrCreateSheet(ss, SHEET_NAME);
 
     if (action === "create_appointment") {
       return handleCreateAppointment(sheet, data);
@@ -71,6 +72,33 @@ function doGet(e) {
     message: "Google Sheets Webhook API is active and ready to receive bookings.",
     timestamp: new Date().toISOString()
   });
+}
+
+/**
+ * Ensure table headers exist in Row 1
+ */
+function ensureHeaders(sheet) {
+  if (sheet.getLastRow() === 0) {
+    var headers = [
+      "Timestamp",
+      "Appointment ID",
+      "Patient Name",
+      "Email Address",
+      "Mobile Phone",
+      "Treatment / Service",
+      "Preferred Date",
+      "Preferred Time",
+      "Status",
+      "Patient Notes",
+      "Clinic Internal Notes"
+    ];
+    sheet.appendRow(headers);
+    var headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setFontWeight("bold");
+    headerRange.setBackground("#2f8f4e");
+    headerRange.setFontColor("#ffffff");
+    sheet.setFrozenRows(1);
+  }
 }
 
 /**
@@ -107,7 +135,7 @@ function handleCreateAppointment(sheet, data) {
     internalNotes
   ]);
 
-  // 1. Send Customer Success Confirmation Email
+  // Send Customer Success Confirmation Email
   if (email && email.indexOf("@") !== -1) {
     sendCustomerSuccessEmail({
       toEmail: email,
@@ -135,7 +163,6 @@ function handleCreateAppointment(sheet, data) {
 function handleUpdateStatus(sheet, data) {
   var appointmentId = data.appointment_id || "";
   var email = data.email || "";
-  var phone = data.phone || "";
   var newStatus = data.status || "confirmed";
   var internalNotes = data.internal_notes || "";
   var patientName = data.patient_name || "Patient";
@@ -149,11 +176,9 @@ function handleUpdateStatus(sheet, data) {
   var values = dataRange.getValues();
   var rowIndex = -1;
 
-  // Search for the matching row by appointmentId or Email/Phone
   for (var i = 1; i < values.length; i++) {
     var rowId = String(values[i][1]);
     var rowEmail = String(values[i][3]);
-    var rowPhone = String(values[i][4]);
 
     if (appointmentId && rowId === String(appointmentId)) {
       rowIndex = i + 1;
@@ -166,17 +191,13 @@ function handleUpdateStatus(sheet, data) {
     }
   }
 
-  // Update sheet if row found
   if (rowIndex !== -1) {
-    // Column 9: Status
     sheet.getRange(rowIndex, 9).setValue(newStatus);
-    // Column 11: Internal Notes (if provided)
     if (internalNotes) {
       sheet.getRange(rowIndex, 11).setValue(internalNotes);
     }
   }
 
-  // Send status update notification email to the patient
   if (email && email.indexOf("@") !== -1) {
     sendStatusUpdateEmail({
       toEmail: email,
@@ -197,36 +218,6 @@ function handleUpdateStatus(sheet, data) {
     message: "Status updated to " + newStatus + " and customer notified via email.",
     row_updated: rowIndex !== -1
   });
-}
-
-/**
- * Helper to ensure Appointments sheet exists with styled headers
- */
-function getOrCreateSheet(ss, sheetName) {
-  var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
-    var headers = [
-      "Timestamp",
-      "Appointment ID",
-      "Patient Name",
-      "Email Address",
-      "Mobile Phone",
-      "Treatment / Service",
-      "Preferred Date",
-      "Preferred Time",
-      "Status",
-      "Patient Notes",
-      "Clinic Internal Notes"
-    ];
-    sheet.appendRow(headers);
-    var headerRange = sheet.getRange(1, 1, 1, headers.length);
-    headerRange.setFontWeight("bold");
-    headerRange.setBackground("#2f8f4e");
-    headerRange.setFontColor("#ffffff");
-    sheet.setFrozenRows(1);
-  }
-  return sheet;
 }
 
 /**

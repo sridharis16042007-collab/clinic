@@ -36,22 +36,40 @@ export async function sendToGoogleAppsScript(
   }
 
   try {
+    const postBody = JSON.stringify({
+      ...payload,
+      clinic_name: payload.clinic_name || 'Vriksham Dental Care',
+      clinic_phone: payload.clinic_phone || '+91 94432 78120',
+      timestamp: new Date().toISOString(),
+    });
+
+    // Send as text/plain so Google Apps Script parses postData.contents reliably
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
-      body: JSON.stringify({
-        ...payload,
-        clinic_name: payload.clinic_name || 'Vriksham Dental Care',
-        clinic_phone: payload.clinic_phone || '+91 94432 78120',
-        timestamp: new Date().toISOString(),
-      }),
-      // Follow Google Apps Script 302 redirects automatically
+      body: postBody,
       redirect: 'follow',
     });
 
     const responseText = await response.text();
+
+    // Check if Google redirected to a sign-in screen (401 or accounts.google.com)
+    if (
+      response.status === 401 ||
+      responseText.includes('accounts.google.com') ||
+      responseText.includes('Sign in - Google Accounts')
+    ) {
+      console.warn(
+        '[Google Sheets Webhook Warning] Google blocked this request with 401/Login redirect. In Apps Script, set "Who has access" to "Anyone" and redeploy.'
+      );
+      return {
+        success: false,
+        error:
+          'Google Web App requires public permissions. In Apps Script, click Deploy -> New deployment -> Who has access: Anyone.',
+      };
+    }
 
     let jsonResult;
     try {

@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       settings.google_sheets_script_url
     );
 
-    // 5. Also insert into Supabase if connected
+    // 5. Also insert into Supabase if connected, or persistent fallback store
     const supabase = createClient();
     if (supabase) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -79,6 +79,24 @@ export async function POST(request: NextRequest) {
         patient_notes: data.patient_notes || null,
         status: 'new',
         source: 'website',
+      });
+    } else {
+      const { addLocalAppointment } = await import('@/lib/appointments-store');
+      addLocalAppointment({
+        id: appointmentId,
+        patient_name: data.patient_name,
+        email: data.email,
+        phone: data.phone,
+        treatment_id: data.treatment_id || null,
+        treatment_name: data.treatment_name || 'General Consultation',
+        preferred_date: data.preferred_date,
+        preferred_time: data.preferred_time,
+        patient_notes: data.patient_notes || null,
+        internal_notes: null,
+        status: 'new',
+        source: 'website',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
     }
 

@@ -34,7 +34,7 @@ export async function updateAppointmentStatus(
     );
   }
 
-  // 2. Update Supabase if available
+  // 2. Update Supabase if available or fallback
   const supabase = createClient();
   if (supabase) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +45,9 @@ export async function updateAppointmentStatus(
     if (error) {
       return { success: false, error: error.message };
     }
+  } else {
+    const { updateLocalAppointmentStatus } = await import('@/lib/appointments-store');
+    updateLocalAppointmentStatus(id, status);
   }
 
   revalidatePath('/admin/appointments');
@@ -88,6 +91,9 @@ export async function updateAppointmentNotes(
     if (error) {
       return { success: false, error: error.message };
     }
+  } else {
+    const { updateLocalAppointmentNotes } = await import('@/lib/appointments-store');
+    updateLocalAppointmentNotes(id, internal_notes);
   }
 
   revalidatePath('/admin/appointments');
@@ -105,6 +111,9 @@ export async function deleteAppointment(id: string) {
     if (error) {
       return { success: false, error: error.message };
     }
+  } else {
+    const { deleteLocalAppointment } = await import('@/lib/appointments-store');
+    deleteLocalAppointment(id);
   }
 
   revalidatePath('/admin/appointments');
