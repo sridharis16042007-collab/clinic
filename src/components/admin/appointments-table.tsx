@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AppointmentsTableProps {
@@ -35,6 +36,23 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
   const [tempNotes, setTempNotes] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Sync live appointments from Google Sheets API
+  const syncLiveAppointments = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/appointments', { cache: 'no-store' });
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.appointments)) {
+        setAppointments(data.appointments);
+      }
+    } catch (e) {
+      console.error('Failed to sync appointments:', e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Filter appointments
   const filteredAppointments = appointments.filter((item) => {
@@ -170,6 +188,16 @@ export function AppointmentsTable({ initialAppointments }: AppointmentsTableProp
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
+
+          <button
+            onClick={syncLiveAppointments}
+            disabled={isSyncing}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-canvas hover:bg-surface border border-border text-xs font-medium text-ink transition-colors shadow-sm disabled:opacity-50"
+            title="Refresh latest bookings from Google Sheets"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-accent ${isSyncing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync Sheets'}</span>
+          </button>
 
           <button
             onClick={exportToCSV}

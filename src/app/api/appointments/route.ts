@@ -1,9 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { appointmentSchema } from '@/lib/validations/appointment';
+import { appointmentSchema, normalizeIndianPhone } from '@/lib/validations/appointment';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/utils/rate-limiter';
-import { sendToGoogleAppsScript } from '@/lib/google-sheets';
+import { sendToGoogleAppsScript, fetchAppointmentsFromGoogleSheets } from '@/lib/google-sheets';
 import { getSiteSettings } from '@/lib/data';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  try {
+    const settings = await getSiteSettings();
+
+    // 1. First priority: fetch live from Google Sheets
+    const sheetAppointments = await fetchAppointmentsFromGoogleSheets(
+      settings.google_sheets_script_url
+    );
+
+    if (sheetAppointments && sheetAppointments.length > 0) {
+      return NextResponse.json({
+        success: true,
+        source: 'google-sheets',
+        appointments: sheetAppointments,
+      });
+    }
+
+    // 2. Second priority: Supabase if connected
+    const supabase = createClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return NextResponse.json({
+          success: true,
+          source: 'supabase',
+          appointments: data,
+        });
+      }
+    }
+
+    // 3. Fallback: local store
+    const { getLocalAppointments } = await import('@/lib/appointments-store');
+    return NextResponse.json({
+      success: true,
+      source: 'local-store',
+      appointments: getLocalAppointments(),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Appointments GET error:', msg);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,6 +93,7 @@ export async function POST(request: NextRequest) {
 
     const appointmentId = `app-${Date.now()}`;
     const settings = await getSiteSettings();
+    const cleanPhone = normalizeIndianPhone(data.phone);
 
     // 4. Send directly to Google Sheets database & trigger Customer Success Email
     const googleSheetResult = await sendToGoogleAppsScript(
@@ -51,7 +102,7 @@ export async function POST(request: NextRequest) {
         appointment_id: appointmentId,
         patient_name: data.patient_name,
         email: data.email,
-        phone: data.phone,
+        phone: cleanPhone,
         treatment_name: data.treatment_name || 'General Consultation',
         preferred_date: data.preferred_date,
         preferred_time: data.preferred_time,
@@ -71,7 +122,7 @@ export async function POST(request: NextRequest) {
         id: appointmentId,
         patient_name: data.patient_name,
         email: data.email,
-        phone: data.phone,
+        phone: cleanPhone,
         treatment_id: data.treatment_id || null,
         treatment_name: data.treatment_name || 'General Consultation',
         preferred_date: data.preferred_date,
@@ -86,7 +137,7 @@ export async function POST(request: NextRequest) {
         id: appointmentId,
         patient_name: data.patient_name,
         email: data.email,
-        phone: data.phone,
+        phone: cleanPhone,
         treatment_id: data.treatment_id || null,
         treatment_name: data.treatment_name || 'General Consultation',
         preferred_date: data.preferred_date,

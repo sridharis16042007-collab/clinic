@@ -54,6 +54,8 @@ function doPost(e) {
       var updateResult = handleUpdateStatus(sheet, data, ss);
       SpreadsheetApp.flush();
       return updateResult;
+    } else if (action === "get_appointments") {
+      return handleGetAppointments(sheet);
     } else {
       return createJsonResponse({
         status: "error",
@@ -71,27 +73,73 @@ function doPost(e) {
 }
 
 /**
- * Handle incoming GET requests (health check & debug info)
+ * Handle incoming GET requests:
+ * Returns all appointments from Google Sheet as JSON for the Admin Dashboard
  */
 function doGet(e) {
   try {
     var ss = getSpreadsheet();
     var sheet = ss ? (ss.getSheetByName("Sheet1") || ss.getSheets()[0]) : null;
-    return createJsonResponse({
-      status: "ok",
-      clinic: "Vriksham Dental Care",
-      spreadsheet_name: ss ? ss.getName() : "None",
-      spreadsheet_url: ss ? ss.getUrl() : "None",
-      sheet_name: sheet ? sheet.getName() : "None",
-      total_rows: sheet ? sheet.getLastRow() : 0,
-      timestamp: new Date().toISOString()
-    });
+
+    if (!sheet) {
+      return createJsonResponse({
+        status: "error",
+        message: "Spreadsheet sheet not found."
+      });
+    }
+
+    return handleGetAppointments(sheet, ss);
   } catch (err) {
     return createJsonResponse({
       status: "error",
       message: err.toString()
     });
   }
+}
+
+/**
+ * Helper to extract all appointment rows from Google Sheet
+ */
+function handleGetAppointments(sheet, ss) {
+  var dataRange = sheet.getDataRange();
+  var values = dataRange.getValues();
+  var appointments = [];
+
+  // Header is row 0: [Timestamp, Appointment ID, Patient Name, Email Address, Mobile Phone, Treatment, Preferred Date, Preferred Time, Status, Patient Notes, Internal Notes]
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    // Skip empty rows
+    if (!row[1] && !row[2]) continue;
+
+    var rawPhone = String(row[4] || "").replace(/^'/, "");
+
+    appointments.push({
+      id: String(row[1] || "app-" + i),
+      patient_name: String(row[2] || "Patient"),
+      email: String(row[3] || ""),
+      phone: rawPhone,
+      treatment_name: String(row[5] || "General Consultation"),
+      preferred_date: row[6] ? (row[6] instanceof Date ? Utilities.formatDate(row[6], "GMT+05:30", "yyyy-MM-dd") : String(row[6])) : "",
+      preferred_time: String(row[7] || "10:00 AM"),
+      status: String(row[8] || "new").toLowerCase().trim(),
+      patient_notes: String(row[9] || ""),
+      internal_notes: String(row[10] || ""),
+      created_at: row[0] ? (row[0] instanceof Date ? row[0].toISOString() : String(row[0])) : new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+  }
+
+  // Newest appointments first
+  appointments.reverse();
+
+  return createJsonResponse({
+    status: "success",
+    clinic: "Vriksham Dental Care",
+    spreadsheet_name: ss ? ss.getName() : "versionclinic",
+    count: appointments.length,
+    appointments: appointments,
+    timestamp: new Date().toISOString()
+  });
 }
 
 /**
@@ -140,13 +188,19 @@ function handleCreateAppointment(sheet, data, ss) {
   var clinicName = data.clinic_name || "Vriksham Dental Care";
   var clinicPhone = data.clinic_phone || "+91 94432 78120";
 
+  // Format phone as explicit text with single quote to prevent Google Sheets formula #ERROR!
+  var formattedPhone = phone ? String(phone).trim() : "";
+  if (formattedPhone.charAt(0) === "+") {
+    formattedPhone = "'" + formattedPhone;
+  }
+
   // Append new row to Google Sheet
   sheet.appendRow([
     timestamp,
     appointmentId,
     patientName,
     email,
-    phone,
+    formattedPhone,
     treatment,
     preferredDate,
     preferredTime,
@@ -184,7 +238,7 @@ function handleCreateAppointment(sheet, data, ss) {
  * 2. UPDATE STATUS:
  * Updates the appointment status in the sheet and emails the customer their updated status
  */
-function handleUpdateStatus(sheet, data) {
+function handleUpdateStatus(sheet, data, ss) {
   var appointmentId = data.appointment_id || "";
   var email = data.email || "";
   var newStatus = data.status || "confirmed";
@@ -222,15 +276,16 @@ function handleUpdateStatus(sheet, data) {
     }
   }
 
+  // Send status update email to patient
   if (email && email.indexOf("@") !== -1) {
     sendStatusUpdateEmail({
       toEmail: email,
       patientName: patientName,
-      status: newStatus,
       treatment: treatment,
       preferredDate: preferredDate,
       preferredTime: preferredTime,
       appointmentId: appointmentId,
+      newStatus: newStatus,
       internalNotes: internalNotes,
       clinicName: clinicName,
       clinicPhone: clinicPhone
@@ -245,114 +300,87 @@ function handleUpdateStatus(sheet, data) {
 }
 
 /**
- * Sends a patient confirmation email (Customer Success)
+ * 3. Send Customer Success HTML Email on Booking Submission
  */
 function sendCustomerSuccessEmail(params) {
-  var subject = "Appointment Request Received - " + params.clinicName;
-
-  var htmlBody = ""
-    + "<div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e5e0; border-radius: 16px; overflow: hidden;'>"
-    + "  <div style='background-color: #2f8f4e; padding: 28px; text-align: center; color: #ffffff;'>"
-    + "    <h1 style='margin: 0; font-size: 24px; font-weight: 700;'>" + params.clinicName + "</h1>"
-    + "    <p style='margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;'>Salem Main Road, Rasipuram, Namakkal District</p>"
-    + "  </div>"
-    + "  <div style='padding: 32px 28px; color: #141413;'>"
-    + "    <h2 style='font-size: 20px; font-weight: 600; margin-top: 0; color: #141413;'>Appointment Request Received</h2>"
-    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Dear <strong>" + params.patientName + "</strong>,</p>"
-    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Thank you for scheduling your consultation with us. We have received your booking details and saved them in our clinic scheduling calendar.</p>"
-    + "    <div style='background-color: #f6f6f4; border: 1px solid #e4e4df; border-radius: 12px; padding: 20px; margin: 24px 0;'>"
-    + "      <table style='width: 100%; font-size: 13px; line-height: 1.8;'>"
-    + "        <tr><td style='color: #777770; width: 40%;'>Appointment ID:</td><td style='font-weight: 600; font-family: monospace;'>" + params.appointmentId + "</td></tr>"
-    + "        <tr><td style='color: #777770;'>Treatment / Reason:</td><td style='font-weight: 600; color: #2f8f4e;'>" + params.treatment + "</td></tr>"
-    + "        <tr><td style='color: #777770;'>Preferred Date:</td><td style='font-weight: 600;'>" + params.preferredDate + "</td></tr>"
-    + "        <tr><td style='color: #777770;'>Preferred Time:</td><td style='font-weight: 600;'>" + params.preferredTime + "</td></tr>"
-    + "        <tr><td style='color: #777770;'>Current Status:</td><td style='font-weight: 600;'><span style='background: #e6f4ea; color: #137333; padding: 2px 8px; border-radius: 99px; font-size: 11px;'>Received / Pending Confirmation</span></td></tr>"
-    + "      </table>"
-    + "    </div>"
-    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Our reception desk will contact you via WhatsApp or phone call to confirm your final slot with our doctor.</p>"
-    + "    <div style='margin-top: 30px; padding-top: 20px; border-top: 1px dashed #e2e2dd;'>"
-    + "      <p style='margin: 0; font-size: 13px; color: #777770;'>Need urgent assistance or have acute pain?</p>"
-    + "      <p style='margin: 4px 0 0 0; font-size: 14px; font-weight: 600; color: #2f8f4e;'>Direct Reception Hotline: " + params.clinicPhone + "</p>"
-    + "    </div>"
-    + "  </div>"
-    + "  <div style='background-color: #f6f6f4; padding: 18px 28px; text-align: center; font-size: 11px; color: #888880; border-top: 1px solid #e5e5e0;'>"
-    + "    <p style='margin: 0;'>© " + new Date().getFullYear() + " " + params.clinicName + ", Rasipuram, Tamil Nadu.</p>"
-    + "    <p style='margin: 4px 0 0 0;'>This is an automated confirmation email for your appointment request.</p>"
-    + "  </div>"
-    + "</div>";
-
   try {
+    var subject = "Appointment Request Confirmed - " + params.clinicName + " [ID: " + params.appointmentId + "]";
+    var htmlBody = "" +
+      "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5e4; border-radius: 12px; background-color: #ffffff; color: #1a1a1a;'>" +
+      "  <div style='border-bottom: 2px solid #2f8f4e; padding-bottom: 16px; margin-bottom: 20px;'>" +
+      "    <h1 style='color: #2f8f4e; margin: 0; font-size: 24px; font-weight: bold;'>" + params.clinicName + "</h1>" +
+      "    <p style='margin: 4px 0 0 0; color: #666; font-size: 13px;'>Rasipuram, Namakkal District, Tamil Nadu</p>" +
+      "  </div>" +
+      "  <p style='font-size: 16px; line-height: 1.5;'>Dear <strong>" + params.patientName + "</strong>,</p>" +
+      "  <p style='font-size: 14px; color: #333; line-height: 1.6;'>Thank you for booking your consultation with our clinic. Your appointment request has been recorded in our system.</p>" +
+      "  <div style='background-color: #f8faf8; border: 1px solid #dcf0e2; border-radius: 8px; padding: 16px; margin: 20px 0;'>" +
+      "    <h3 style='margin: 0 0 12px 0; font-size: 14px; color: #2f8f4e; text-transform: uppercase; letter-spacing: 0.5px;'>Booking Summary</h3>" +
+      "    <table style='width: 100%; font-size: 14px; border-collapse: collapse;'>" +
+      "      <tr><td style='padding: 6px 0; color: #666; width: 140px;'>Reference ID:</td><td style='padding: 6px 0; font-weight: bold; color: #1a1a1a;'>" + params.appointmentId + "</td></tr>" +
+      "      <tr><td style='padding: 6px 0; color: #666;'>Treatment:</td><td style='padding: 6px 0; font-weight: 500;'>" + params.treatment + "</td></tr>" +
+      "      <tr><td style='padding: 6px 0; color: #666;'>Preferred Date:</td><td style='padding: 6px 0; font-weight: 500;'>" + params.preferredDate + "</td></tr>" +
+      "      <tr><td style='padding: 6px 0; color: #666;'>Preferred Time:</td><td style='padding: 6px 0; font-weight: 500;'>" + params.preferredTime + "</td></tr>" +
+      "      <tr><td style='padding: 6px 0; color: #666;'>Current Status:</td><td style='padding: 6px 0;'><span style='background-color: #e6f4ea; color: #137333; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;'>Received / Under Review</span></td></tr>" +
+      "    </table>" +
+      "  </div>" +
+      "  <p style='font-size: 14px; line-height: 1.6; color: #444;'>Our reception team will review your requested time slot and contact you via phone/WhatsApp if any adjustment is needed.</p>" +
+      "  <div style='background-color: #f3f3f2; padding: 14px; border-radius: 6px; font-size: 13px; color: #555; margin-top: 24px;'>" +
+      "    <strong>Clinic Contact:</strong> " + params.clinicPhone + " | <strong>Address:</strong> Salem Main Road, Rasipuram" +
+      "  </div>" +
+      "  <p style='font-size: 11px; color: #888; margin-top: 20px; text-align: center;'>This is an automated confirmation email from Vriksham Dental Care.</p>" +
+      "</div>";
+
     MailApp.sendEmail({
       to: params.toEmail,
       subject: subject,
       htmlBody: htmlBody
     });
   } catch (err) {
-    Logger.log("Failed to send customer success email: " + err);
+    Logger.log("Customer email failed: " + err.toString());
   }
 }
 
 /**
- * Sends a status update email to the patient when admin changes status
+ * 4. Send Status Update Email when Clinic Changes Appointment Status
  */
 function sendStatusUpdateEmail(params) {
-  var statusTitles = {
-    confirmed: "Confirmed",
-    completed: "Completed",
-    cancelled: "Cancelled",
-    new: "Under Review"
-  };
-
-  var niceStatus = statusTitles[params.status] || params.status;
-  var subject = "Appointment " + niceStatus + " - " + params.clinicName;
-
-  var statusColor = "#2f8f4e";
-  var statusMessage = "Your appointment has been confirmed by our clinical desk. Please arrive 10 minutes prior to your slot.";
-
-  if (params.status === "completed") {
-    statusColor = "#1a73e8";
-    statusMessage = "Thank you for visiting " + params.clinicName + ". We hope your visit was gentle and comfortable. Please follow any post-treatment care instructions given by the doctor.";
-  } else if (params.status === "cancelled") {
-    statusColor = "#d93025";
-    statusMessage = "Your appointment has been cancelled. If you would like to reschedule for another day or have questions, please call our clinic desk.";
-  }
-
-  var htmlBody = ""
-    + "<div style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e5e0; border-radius: 16px; overflow: hidden;'>"
-    + "  <div style='background-color: " + statusColor + "; padding: 24px; text-align: center; color: #ffffff;'>"
-    + "    <h1 style='margin: 0; font-size: 22px; font-weight: 700;'>" + params.clinicName + "</h1>"
-    + "    <p style='margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;'>Status Update Notification</p>"
-    + "  </div>"
-    + "  <div style='padding: 32px 28px; color: #141413;'>"
-    + "    <p style='font-size: 14px; line-height: 1.6; color: #555550;'>Dear <strong>" + params.patientName + "</strong>,</p>"
-    + "    <div style='margin: 20px 0; padding: 16px 20px; border-radius: 12px; background-color: #fbfbfa; border-left: 4px solid " + statusColor + ";'>"
-    + "      <div style='font-size: 12px; text-transform: uppercase; font-weight: 700; color: " + statusColor + ";'>Appointment Status: " + niceStatus.toUpperCase() + "</div>"
-    + "      <p style='font-size: 14px; color: #333330; margin: 8px 0 0 0; line-height: 1.5;'>" + statusMessage + "</p>"
-    + "    </div>"
-    + "    <div style='background-color: #f6f6f4; border: 1px solid #e4e4df; border-radius: 12px; padding: 18px; margin: 24px 0; font-size: 13px; line-height: 1.8;'>"
-    + "      <div><strong>Treatment:</strong> " + params.treatment + "</div>"
-    + (params.preferredDate ? "<div><strong>Date:</strong> " + params.preferredDate + "</div>" : "")
-    + (params.preferredTime ? "<div><strong>Time Slot:</strong> " + params.preferredTime + "</div>" : "")
-    + (params.internalNotes ? "<div style='margin-top: 8px; color: #444440; font-style: italic;'><strong>Note from Doctor:</strong> " + params.internalNotes + "</div>" : "")
-    + "    </div>"
-    + "    <p style='font-size: 13px; line-height: 1.6; color: #666660;'>Location: No. 42/B, Salem Main Road, Near Old Bus Stand, Rasipuram, Namakkal.<br>Direct Phone: <strong>" + params.clinicPhone + "</strong></p>"
-    + "  </div>"
-    + "  <div style='background-color: #f6f6f4; padding: 16px; text-align: center; font-size: 11px; color: #888880; border-top: 1px solid #e5e5e0;'>"
-    + "    © " + new Date().getFullYear() + " " + params.clinicName + ". All rights reserved."
-    + "  </div>"
-    + "</div>";
-
   try {
+    var statusTitle = params.newStatus.toUpperCase();
+    var statusColor = params.newStatus === "confirmed" ? "#2f8f4e" : params.newStatus === "completed" ? "#1a73e8" : "#d93025";
+    var subject = "Update on Your Appointment - " + params.clinicName + " [" + statusTitle + "]";
+
+    var htmlBody = "" +
+      "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5e4; border-radius: 12px; background-color: #ffffff; color: #1a1a1a;'>" +
+      "  <div style='border-bottom: 2px solid " + statusColor + "; padding-bottom: 16px; margin-bottom: 20px;'>" +
+      "    <h1 style='color: " + statusColor + "; margin: 0; font-size: 22px; font-weight: bold;'>" + params.clinicName + "</h1>" +
+      "    <p style='margin: 4px 0 0 0; color: #666; font-size: 13px;'>Appointment Status Update</p>" +
+      "  </div>" +
+      "  <p style='font-size: 16px;'>Dear <strong>" + params.patientName + "</strong>,</p>" +
+      "  <p style='font-size: 14px; line-height: 1.6;'>The status of your appointment request (Ref: <strong>" + params.appointmentId + "</strong>) has been updated to:</p>" +
+      "  <div style='text-align: center; margin: 20px 0;'>" +
+      "    <span style='background-color: " + statusColor + "; color: #ffffff; padding: 8px 20px; border-radius: 20px; font-size: 15px; font-weight: bold; letter-spacing: 0.5px; display: inline-block;'>" +
+             statusTitle +
+      "    </span>" +
+      "  </div>" +
+      (params.internalNotes ? "  <p style='font-size: 14px; background-color: #f8f9fa; padding: 12px; border-left: 3px solid " + statusColor + "; border-radius: 4px;'><strong>Clinic Note:</strong> " + params.internalNotes + "</p>" : "") +
+      "  <div style='font-size: 13px; color: #555; margin-top: 24px;'>" +
+      "    If you need to reschedule or have any urgent questions, please call us directly at <strong>" + params.clinicPhone + "</strong>." +
+      "  </div>" +
+      "</div>";
+
     MailApp.sendEmail({
       to: params.toEmail,
       subject: subject,
       htmlBody: htmlBody
     });
   } catch (err) {
-    Logger.log("Failed to send status update email: " + err);
+    Logger.log("Status update email failed: " + err.toString());
   }
 }
 
+/**
+ * Utility: Create JSON Output with CORS headers
+ */
 function createJsonResponse(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);

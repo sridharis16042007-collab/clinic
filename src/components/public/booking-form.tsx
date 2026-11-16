@@ -197,9 +197,8 @@ export function BookingForm({ services, settings }: BookingFormProps) {
             type="text"
             placeholder="e.g. S. Murugan"
             {...register('patient_name')}
-            className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${
-              errors.patient_name ? 'border-red-500' : 'border-border'
-            }`}
+            className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${errors.patient_name ? 'border-red-500' : 'border-border'
+              }`}
           />
         </div>
         {errors.patient_name && (
@@ -224,9 +223,8 @@ export function BookingForm({ services, settings }: BookingFormProps) {
             type="email"
             placeholder="e.g. patient@example.com"
             {...register('email')}
-            className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${
-              errors.email ? 'border-red-500' : 'border-border'
-            }`}
+            className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${errors.email ? 'border-red-500' : 'border-border'
+              }`}
           />
         </div>
         {errors.email && (
@@ -242,20 +240,25 @@ export function BookingForm({ services, settings }: BookingFormProps) {
         >
           Mobile Number (WhatsApp) <span className="text-accent">*</span>
         </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink-muted">
-            <Phone className="w-4 h-4" />
+        <div className="relative flex items-center">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-ink-muted">
+            <span className="text-xs font-semibold text-ink-muted/80 bg-canvas-subtle px-1.5 py-0.5 rounded border border-border flex items-center gap-1">
+              <span>🇮🇳</span>
+              <span>+91</span>
+            </span>
           </div>
           <input
             id="phone"
             type="tel"
-            placeholder="e.g. 94432 78120"
+            placeholder="94432 78120 (or +91 94432 78120)"
             {...register('phone')}
-            className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${
-              errors.phone ? 'border-red-500' : 'border-border'
-            }`}
+            className={`w-full pl-20 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink placeholder:text-ink-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${errors.phone ? 'border-red-500' : 'border-border'
+              }`}
           />
         </div>
+        <p className="text-[11px] text-ink-muted">
+          Accepts 10-digit Indian mobile numbers (e.g. 94432 78120 or with +91)
+        </p>
         {errors.phone && (
           <p className="text-xs text-red-600">{errors.phone.message}</p>
         )}
@@ -303,9 +306,8 @@ export function BookingForm({ services, settings }: BookingFormProps) {
               type="date"
               min={todayDateString}
               {...register('preferred_date')}
-              className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${
-                errors.preferred_date ? 'border-red-500' : 'border-border'
-              }`}
+              className={`w-full pl-10 pr-4 py-3 bg-canvas border rounded-xl text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors ${errors.preferred_date ? 'border-red-500' : 'border-border'
+                }`}
             />
           </div>
           {errors.preferred_date && (

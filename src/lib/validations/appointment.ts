@@ -1,7 +1,47 @@
 import { z } from 'zod';
 
-// Indian mobile number validation regex: 10 digits starting with 6, 7, 8, or 9
-const indianPhoneRegex = /^(?:(?:\+|0{0,2})91(\s*[-]\s*)?|[0]?)?[6789]\d{9}$/;
+/**
+ * Normalizes Indian phone numbers into clean '+91 XXXXX XXXXX' format.
+ * Accepts:
+ * - 10 digits: '9443278120' -> '+91 94432 78120'
+ * - With +91: '+919443278120', '+91 94432 78120' -> '+91 94432 78120'
+ * - With 0: '09443278120' -> '+91 94432 78120'
+ */
+export function normalizeIndianPhone(input: string): string {
+  if (!input) return '';
+  const digits = input.replace(/\D/g, '');
+  let tenDigits = '';
+
+  if (digits.length === 10) {
+    tenDigits = digits;
+  } else if (digits.length > 10 && digits.startsWith('91')) {
+    tenDigits = digits.slice(-10);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    tenDigits = digits.slice(1);
+  } else {
+    tenDigits = digits.slice(-10);
+  }
+
+  if (tenDigits.length === 10) {
+    return `+91 ${tenDigits.slice(0, 5)} ${tenDigits.slice(5)}`;
+  }
+  return input.trim();
+}
+
+// Indian mobile regex: must have 10 digits starting with 6, 7, 8, or 9
+export function isValidIndianMobile(val: string): boolean {
+  if (!val) return false;
+  const digits = val.replace(/\D/g, '');
+  let mobile10 = '';
+  if (digits.length === 10) {
+    mobile10 = digits;
+  } else if (digits.length > 10 && digits.startsWith('91')) {
+    mobile10 = digits.slice(-10);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    mobile10 = digits.slice(1);
+  }
+  return /^[6789]\d{9}$/.test(mobile10);
+}
 
 export const appointmentSchema = z.object({
   patient_name: z
@@ -17,9 +57,10 @@ export const appointmentSchema = z.object({
   phone: z
     .string()
     .trim()
-    .refine((val) => indianPhoneRegex.test(val.replace(/\s+/g, '')), {
-      message: 'Please enter a valid 10-digit Indian mobile number',
-    }),
+    .refine((val) => isValidIndianMobile(val), {
+      message: 'Please enter a valid 10-digit Indian mobile number (e.g. +91 94432 78120 or 9443278120)',
+    })
+    .transform((val) => normalizeIndianPhone(val)),
   treatment_id: z.string().optional().nullable(),
   treatment_name: z.string().optional().nullable(),
   preferred_date: z

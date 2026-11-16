@@ -2,15 +2,25 @@ import React from 'react';
 import { AppointmentsTable } from '@/components/admin/appointments-table';
 import { createClient } from '@/lib/supabase/server';
 import { getLocalAppointments } from '@/lib/appointments-store';
+import { fetchAppointmentsFromGoogleSheets } from '@/lib/google-sheets';
+import { getSiteSettings } from '@/lib/data';
 import { Appointment } from '@/types/clinic';
 import { Inbox } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function AdminAppointmentsPage() {
-  const supabase = createClient();
-  let appointments: Appointment[] = getLocalAppointments();
+  const settings = await getSiteSettings();
 
+  // 1. Fetch live appointments from Google Sheets (Primary Database in Production)
+  const sheetAppointments = await fetchAppointmentsFromGoogleSheets(
+    settings.google_sheets_script_url
+  );
+
+  // 2. Fetch from Supabase if connected
+  const supabase = createClient();
+  let dbAppointments: Appointment[] = [];
   if (supabase) {
     const { data, error } = await supabase
       .from('appointments')
@@ -18,8 +28,21 @@ export default async function AdminAppointmentsPage() {
       .order('created_at', { ascending: false });
 
     if (!error && data && data.length > 0) {
-      appointments = data as Appointment[];
+      dbAppointments = data as Appointment[];
     }
+  }
+
+  // 3. Fallback to local persistent cache
+  const localAppointments = getLocalAppointments();
+
+  // Prioritize Google Sheets live data first
+  let appointments: Appointment[] = [];
+  if (sheetAppointments.length > 0) {
+    appointments = sheetAppointments;
+  } else if (dbAppointments.length > 0) {
+    appointments = dbAppointments;
+  } else {
+    appointments = localAppointments;
   }
 
   return (
@@ -34,7 +57,7 @@ export default async function AdminAppointmentsPage() {
             Appointments Inbox
           </h1>
           <p className="text-xs sm:text-sm text-ink-muted mt-1">
-            Review incoming patient requests, update statuses, add clinic notes, and reply via WhatsApp.
+            Review incoming patient requests live from Google Sheets, update statuses, add clinic notes, and reply via WhatsApp.
           </p>
         </div>
       </div>
