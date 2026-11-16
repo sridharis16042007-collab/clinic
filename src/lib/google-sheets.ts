@@ -3,7 +3,7 @@
  * - Stores appointment submissions directly in Google Sheets
  * - Triggers Customer Success Confirmation Emails on submission
  * - Triggers Status Update Emails when admin modifies appointment status
- * - Fetches live appointments directly from Google Sheets for Admin Dashboard
+ * - Fetches live appointments directly from Google Sheets (via CSV export or Apps Script API)
  */
 
 import { Appointment } from '@/types/clinic';
@@ -11,6 +11,10 @@ import { Appointment } from '@/types/clinic';
 const DEFAULT_SCRIPT_URL =
   process.env.GOOGLE_SHEETS_SCRIPT_URL ||
   'https://script.google.com/macros/s/AKfycbxeyk1TkwwQc4nfCJCZ84Gr3ldpN5w8YISrioBtaf2s6JKbCZ8pkxwbjEGZKCThrYbVpA/exec';
+
+// Spreadsheet ID for versionclinic:
+export const SPREADSHEET_ID = '13hZQKf5iGbFuJ1a-U334cYLL9CP3s4quC342-9n66kQ';
+export const SPREADSHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=0`;
 
 export interface GoogleSheetsAppointmentPayload {
   action: 'create_appointment' | 'update_status' | 'get_appointments';
@@ -28,6 +32,52 @@ export interface GoogleSheetsAppointmentPayload {
   clinic_phone?: string;
 }
 
+/**
+ * Fast & robust CSV parser for Google Sheets export
+ */
+function parseCSV(csvText: string): string[][] {
+  const lines: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let insideQuote = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (char === '"') {
+      if (insideQuote && nextChar === '"') {
+        currentField += '"';
+        i++; // skip escaped quote
+      } else {
+        insideQuote = !insideQuote;
+      }
+    } else if (char === ',' && !insideQuote) {
+      currentRow.push(currentField.trim());
+      currentField = '';
+    } else if ((char === '\r' || char === '\n') && !insideQuote) {
+      if (char === '\r' && nextChar === '\n') i++;
+      currentRow.push(currentField.trim());
+      if (currentRow.some((f) => f.length > 0)) {
+        lines.push(currentRow);
+      }
+      currentRow = [];
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some((f) => f.length > 0)) {
+      lines.push(currentRow);
+    }
+  }
+
+  return lines;
+}
+
 export async function sendToGoogleAppsScript(
   payload: GoogleSheetsAppointmentPayload,
   scriptUrlOverride?: string | null
@@ -39,8 +89,15 @@ export async function sendToGoogleAppsScript(
   }
 
   try {
+    // Crucial: Format phone with leading single quote so Google Sheets NEVER treats it as a formula (#ERROR!)
+    let phoneToSend = payload.phone ? String(payload.phone).trim() : '';
+    if (phoneToSend.startsWith('+') && !phoneToSend.startsWith("'")) {
+      phoneToSend = "'" + phoneToSend;
+    }
+
     const postBody = JSON.stringify({
       ...payload,
+      phone: phoneToSend,
       clinic_name: payload.clinic_name || 'Vriksham Dental Care',
       clinic_phone: payload.clinic_phone || '+91 94432 78120',
       timestamp: new Date().toISOString(),
@@ -97,16 +154,66 @@ export async function sendToGoogleAppsScript(
 }
 
 /**
- * Fetch all live appointments from Google Sheets via Apps Script Web App
+ * Fetch all live appointments from Google Sheets
+ * 1. Primary path: Direct Google Sheets CSV Export (Instant, real-time, no Apps Script delays)
+ * 2. Secondary path: Google Apps Script Web App (doGet / get_appointments)
  */
 export async function fetchAppointmentsFromGoogleSheets(
   scriptUrlOverride?: string | null
 ): Promise<Appointment[]> {
+  // --- Strategy 1: Direct Google Sheet CSV Export ---
+  try {
+    const csvRes = await fetch(SPREADSHEET_CSV_URL, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+
+    if (csvRes.ok) {
+      const csvText = await csvRes.text();
+      if (csvText && csvText.includes('Appointment ID')) {
+        const rows = parseCSV(csvText);
+        const parsedAppointments: Appointment[] = [];
+
+        // Row 0 is header: Timestamp, Appointment ID, Patient Name, Email Address, Mobile Phone, Treatment, Preferred Date, Preferred Time, Status, Patient Notes, Internal Notes
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row[1] && !row[2]) continue;
+
+          const rawPhone = String(row[4] || '').replace(/^'/, '').trim();
+
+          parsedAppointments.push({
+            id: String(row[1] || `app-${i}`),
+            patient_name: String(row[2] || 'Patient'),
+            email: String(row[3] || ''),
+            phone: rawPhone,
+            treatment_id: null,
+            treatment_name: String(row[5] || 'General Consultation'),
+            preferred_date: String(row[6] || ''),
+            preferred_time: String(row[7] || ''),
+            status: (String(row[8] || 'new').toLowerCase().trim()) as Appointment['status'],
+            patient_notes: String(row[9] || ''),
+            internal_notes: String(row[10] || ''),
+            source: 'website',
+            created_at: String(row[0] || new Date().toISOString()),
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        if (parsedAppointments.length > 0) {
+          // Newest first
+          return parsedAppointments.reverse();
+        }
+      }
+    }
+  } catch (csvErr) {
+    console.warn('[Google Sheets CSV Warning] Could not fetch directly from CSV export:', csvErr);
+  }
+
+  // --- Strategy 2: Google Apps Script Web App ---
   const url = scriptUrlOverride || DEFAULT_SCRIPT_URL;
   if (!url) return [];
 
   try {
-    // 1. Try GET request to Web App
     const response = await fetch(url, {
       method: 'GET',
       headers: { Accept: 'application/json' },
@@ -117,7 +224,7 @@ export async function fetchAppointmentsFromGoogleSheets(
       const text = await response.text();
       try {
         const json = JSON.parse(text);
-        if (json && Array.isArray(json.appointments)) {
+        if (json && Array.isArray(json.appointments) && json.appointments.length > 0) {
           return json.appointments as Appointment[];
         }
       } catch {
@@ -125,7 +232,7 @@ export async function fetchAppointmentsFromGoogleSheets(
       }
     }
 
-    // 2. Fallback: try POST with action 'get_appointments'
+    // Try POST action 'get_appointments'
     const postRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -137,17 +244,16 @@ export async function fetchAppointmentsFromGoogleSheets(
       const text = await postRes.text();
       try {
         const json = JSON.parse(text);
-        if (json && Array.isArray(json.appointments)) {
+        if (json && Array.isArray(json.appointments) && json.appointments.length > 0) {
           return json.appointments as Appointment[];
         }
       } catch {
         // ignore parse error
       }
     }
-
-    return [];
   } catch (err) {
     console.warn('[Google Sheets Fetch Warning] Could not fetch appointments live:', err);
-    return [];
   }
+
+  return [];
 }
